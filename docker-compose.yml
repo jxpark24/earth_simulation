@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: ./backend
+    container_name: sat-backend
+    environment:
+      # Which Celestrak groups to load, and how fast to stream positions.
+      TLE_GROUPS: "stations,starlink,gps-ops,galileo,weather,science"
+      STREAM_HZ: "20"
+      MAX_SATS: "0"          # 0 = no limit
+      TLE_CACHE_TTL: "21600" # re-fetch elements every 6 hours
+    volumes:
+      - tle-cache:/app/data
+    expose:
+      - "8000"
+    ports:
+      - "8000:8000"          # exposed directly too, for curling the API
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if 'ok' in urllib.request.urlopen('http://localhost:8000/api/health',timeout=5).read().decode() else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  frontend:
+    build: ./frontend
+    container_name: sat-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  tle-cache:
