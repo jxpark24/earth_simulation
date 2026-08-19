@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Satellite Simulation</title>
+<style>
+  :root {
+    --fg: #e8eef7;
+    --dim: #7c8ba1;
+    --accent: #4da3ff;
+    --panel: rgba(10, 14, 22, 0.78);
+    --border: rgba(120, 160, 210, 0.22);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #000;                     /* space is black */
+    color: var(--fg);
+    font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  #scene { position: fixed; inset: 0; display: block; cursor: grab; }
+  #scene:active { cursor: grabbing; }
+
+  .panel {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* ---- title ---- */
+  #title { top: 16px; left: 16px; padding: 12px 16px; }
+  #title h1 {
+    margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  #title .sub { color: var(--dim); font-size: 11px; margin-top: 3px; }
+
+  /* ---- controls ---- */
+  #controls { top: 16px; right: 16px; padding: 14px 16px; width: 232px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .row:last-child { margin-bottom: 0; }
+  label { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .btn {
+    flex: 1; padding: 5px 0; text-align: center; cursor: pointer;
+    background: rgba(77,163,255,0.10); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 11px;
+  }
+  .btn:hover  { background: rgba(77,163,255,0.24); }
+  .btn.on     { background: var(--accent); color: #041020; border-color: var(--accent); }
+  .val { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  /* ---- readouts ---- */
+  #hud { bottom: 16px; left: 16px; padding: 12px 16px; min-width: 250px; }
+  #hud .k { color: var(--dim); display: inline-block; width: 104px; }
+  #hud .v { color: var(--fg); font-variant-numeric: tabular-nums; }
+
+  #info { bottom: 16px; right: 16px; padding: 12px 16px; width: 232px; display: none; }
+  #info .name { color: var(--accent); font-weight: 600; margin-bottom: 6px; word-break: break-word; }
+  #info .k { color: var(--dim); display: inline-block; width: 92px; }
+
+  #hint {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    color: var(--dim); font-size: 11px; text-align: center; pointer-events: none;
+    transition: opacity 0.6s; letter-spacing: 0.04em;
+  }
+
+  /* ---- loading ---- */
+  #loader {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; background: #000; z-index: 50;
+    transition: opacity 0.8s;
+  }
+  #loader .ring {
+    width: 46px; height: 46px; border: 2px solid rgba(77,163,255,0.2);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader .msg { margin-top: 18px; color: var(--dim); font-size: 12px; letter-spacing: 0.05em; }
+  .hidden { opacity: 0; pointer-events: none; }
+
+  @media (max-width: 820px) {
+    #controls { width: 176px; padding: 10px; }
+    #hud, #info { display: none !important; }
+    #title h1 { font-size: 12px; }
+    /* Keep the title clear of the control panel on narrow screens. */
+    #title { max-width: calc(100% - 224px); }
+    #title .sub { display: none; }
+    #hint { font-size: 10px; padding: 0 12px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="loader">
+  <div class="ring"></div>
+  <div class="msg" id="loadmsg">connecting to engine…</div>
+</div>
+
+<div class="panel" id="title">
+  <h1>Satellite Simulation</h1>
+  <div class="sub">live orbital elements · SGP4 in C++</div>
+</div>
+
+<div class="panel" id="controls">
+  <div class="row"><label>time rate</label><span class="val" id="rateval">1×</span></div>
+  <div class="row"><input type="range" id="rate" min="0" max="10" step="1" value="3"></div>
+  <div class="row">
+    <button class="btn" id="pause">pause</button>
+    <button class="btn" id="now">now</button>
+  </div>
+  <div class="row"><label>orbits</label><button class="btn" id="toggleOrbits">off</button></div>
+  <div class="row"><label>clouds</label><button class="btn on" id="toggleClouds">on</button></div>
+  <div class="row"><label>size</label><input type="range" id="size" min="1" max="10" step="0.5" value="3.5"></div>
+</div>
+
+<div class="panel" id="hud">
+  <div><span class="k">satellites</span><span class="v" id="h-count">—</span></div>
+  <div><span class="k">sim time utc</span><span class="v" id="h-time">—</span></div>
+  <div><span class="k">engine</span><span class="v" id="h-engine">—</span></div>
+  <div><span class="k">stream</span><span class="v" id="h-stream">—</span></div>
+  <div><span class="k">render</span><span class="v" id="h-fps">—</span></div>
+</div>
+
+<div class="panel" id="info">
+  <div class="name" id="i-name">—</div>
+  <div><span class="k">norad id</span><span id="i-id">—</span></div>
+  <div><span class="k">altitude</span><span id="i-alt">—</span></div>
+  <div><span class="k">speed</span><span id="i-spd">—</span></div>
+  <div><span class="k">period</span><span id="i-per">—</span></div>
+  <div><span class="k">inclination</span><span id="i-inc">—</span></div>
+</div>
+
+<div id="hint">drag to orbit · scroll to zoom · click a satellite to track</div>
+
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>
