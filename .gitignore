@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# C++ / CMake build output
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.so
+*.a
+*.dylib
+
+# Frontend
+node_modules/
+dist/
+
+# Environment / secrets
+.env
+.env.local
+
+# Simulation data & logs
+backend/data/*
+!backend/data/.gitkeep
+*.log
